@@ -26,6 +26,7 @@ namespace Razormill
 		int           mMinZoom;
 		int           mMaxZoom;
 		bool          mResume;
+		bool		  mVerbose;
 		
 		Region           mRegion;
 		std::atomic_long mIndex;
@@ -35,15 +36,17 @@ namespace Razormill
 		void baseWorker();
 		void buildBase();
 		void buildZoom();
-		void zoomWorker();
+		bool isfile(const char* path) const;
 		int  lastIndex() const;
+		void log(const char* format, ...) const;
 		int  nextIndex();
+		void zoomWorker();
 		
-		virtual void		 generateDirs()		const = 0;
-		virtual GDALDataset* baseRaster(int i)     const = 0;
-		virtual GDALDataset* quadRaster(int i)	const = 0;
-		virtual void         calcRegion(int z)       = 0;
-		virtual int          calcZoom()        const = 0;
+		virtual void		 generateDirs()		           const = 0;
+		virtual GDALDataset* baseRaster(int i)             const = 0;
+		virtual GDALDataset* quadRaster(int i, char* path) const = 0;
+		virtual void         calcRegion(int z)                   = 0;
+		virtual int          calcZoom()                    const = 0;
 		
 	public:
 		Tiler(const char* projection, const char* source, const char* target, Format* format);
@@ -53,6 +56,7 @@ namespace Razormill
 		void setNThreads(int n);
 		void setResume(bool resume);
 		void setZoom(int min, int max);
+		void setVerbose(bool verbose);
 	};
 }
 

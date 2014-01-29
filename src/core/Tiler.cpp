@@ -39,8 +39,11 @@ namespace Razormill
 		int status = mkdir(target, 0755);
 		if(status != 0)
 		{
-			printf("Directory creation failed. Errcode: %d\n", status);
-			exit(-1);
+			if(errno != EEXIST)
+			{
+				printf("Directory creation failed:\n\%s\n", strerror(errno));
+				exit(-1);
+			}
 		}
 	}
 	
@@ -50,7 +53,6 @@ namespace Razormill
 	
 	void Tiler::baseWorker()
 	{
-		printf("baseWorker: %p\n", this);
 		int i = nextIndex();
 		if(i >= lastIndex())
 		{
@@ -77,7 +79,6 @@ namespace Razormill
 			warp_opts->panDstBands[b] = b + 1;
 		}
 		
-		MARKER();
 		while(i < lastIndex())
 		{
 			GDALDataset* target = baseRaster(i);
@@ -97,13 +98,13 @@ namespace Razormill
 	
 	void Tiler::buildBase()
 	{
-		MARKER();
 		mIndex = 0;
+		generateDirs();
 		std::thread** threads = new std::thread*[mNThreads];
 		
 		for(int i = 0; i < mNThreads; ++i)
 		{
-			printf("Spawning worker (this = %p)...\n", this);
+			log("Spawning worker (this = %p)...\n", this);
 			threads[i] = new std::thread(&Tiler::baseWorker, this);
 		}
 		
@@ -118,12 +119,12 @@ namespace Razormill
 	
 	void Tiler::buildZoom()
 	{
-		MARKER();
 		std::thread** threads = new std::thread*[mNThreads];
 		
 		while(mRegion.upscale() >= mMinZoom)
 		{
 			mIndex = 0;
+			generateDirs();
 			
 			for(int i = 0; i < mNThreads; ++i)
 			{
@@ -150,12 +151,17 @@ namespace Razormill
 		return mIndex.fetch_add(1);
 	}
 	
+	bool Tiler::isfile(const char* path) const
+	{
+		struct stat buffer;
+		return (stat(path, &buffer) == 0);
+	}
+	
 	void Tiler::run()
 	{
 		calcRegion(mMaxZoom);
-		generateDirs();
 		buildBase();
-		//buildZoom();
+		buildZoom();
 	}
 	
 	void Tiler::setNThreads(int n)
@@ -174,31 +180,54 @@ namespace Razormill
 		mMaxZoom = max;
 	}
 	
+	void Tiler::setVerbose(bool verbose)
+	{
+		mVerbose = verbose;
+	}
+	
+	void Tiler::log(const char* format, ...) const
+	{
+		if(mVerbose)
+		{
+			va_list argptr;
+			va_start(argptr,format);
+			vprintf(format, argptr);
+			va_end(argptr);
+		}
+	}
+	
 	void Tiler::zoomWorker()
 	{
-		/*printf("zoomWorker: %p\n", this);
 		int i = nextIndex();
 		if(i >= lastIndex())
 		{
 			return;
 		}
 		
-		// Do constant config.  Is there any?
+		char buffer[128];
 		
-		MARKER();
 		while(i < lastIndex())
 		{
-			GDALDataset* target = zoomRaster(i);
+			GDALDataset* source = quadRaster(i, buffer);
 			
-			if(target != NULL)
+			if(source != NULL)
 			{
-				// Build overview
-				// Copy to output
-				// Close stuff
+				log("Writing %s...\n", buffer);
+				GDALDataset* target = mFormat->create(buffer);
+				
+				for(int i = 1; i <= mFormat->b(); ++i)
+				{
+					GDALRasterBand* sband = source->GetRasterBand(i);
+					GDALRasterBand* tband = target->GetRasterBand(i);
+					GDALRegenerateOverviews(sband, 1, (void**) &tband, "AVERAGE", NULL, NULL);
+				}
+				
+				GDALClose(source);
+				GDALClose(target);
 			}
 			
 			i = nextIndex();
-		}*/
+		}
 	}
 }
 

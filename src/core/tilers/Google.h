@@ -8,11 +8,13 @@ namespace Razormill
 	class GoogleTiler : public Tiler
 	{
 	protected:
-		virtual void		 generateDirs()		const;
-		virtual GDALDataset* baseRaster(int i)	const;
-		virtual GDALDataset* quadRaster(int i)	const;
+		void loadQuad(GDALDataset* quad, int x, int y, int dx, int dy) const;
+		
+		virtual GDALDataset* baseRaster(int i)	           const;
 		virtual void         calcRegion(int z);
-		virtual int          calcZoom()			const;
+		virtual int          calcZoom()			           const;
+		virtual void		 generateDirs()		           const;
+		virtual GDALDataset* quadRaster(int i, char* path) const;
 		
 	public:
 		GoogleTiler(const char* source, const char* target, Format* format);

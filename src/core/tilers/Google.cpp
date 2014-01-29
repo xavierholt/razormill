@@ -36,11 +36,7 @@ namespace Razormill
 		double xmax = m[2];
 		double ymax = m[3];
 		
-		std::cout << "World Region:\n" <<
-		"  n: " << ymax << '\n' <<
-		"  e: " << xmax << '\n' <<
-		"  s: " << ymin << '\n' <<
-		"  w: " << xmin << '\n';
+		log("World Region:\n  n: %12.6f\n  e: %f\n  s: %f\n  w: %f\n", ymax, xmax, ymin, xmin);
 		
 		double adj = M_PI * 6378137;
 		double upt = M_PI * 6378137 / pow(2, z-1);
@@ -52,13 +48,7 @@ namespace Razormill
 		mRegion.h = floor((ymax + adj) / upt) - mRegion.y + 1;
 		mRegion.n = mRegion.w * mRegion.h;
 		
-		std::cout << "Tile Region:\n" <<
-		"  x: " << mRegion.x << '\n' <<
-		"  y: " << mRegion.y << '\n' <<
-		"  z: " << mRegion.z << '\n' <<
-		"  w: " << mRegion.w << '\n' <<
-		"  h: " << mRegion.h << '\n' <<
-		"  n: " << mRegion.n << '\n';
+		log("Tile Region:\n  x: %i\n  y: %i\n  z: %i\n  w: %i\n  h: %i\n  n: %i\n", mRegion.x, mRegion.y, mRegion.z, mRegion.w, mRegion.h, mRegion.n);
 	}
 	
 	int GoogleTiler::calcZoom() const
@@ -102,62 +92,54 @@ namespace Razormill
 		geomap[0] = x * upt - adj;
 		geomap[1] = upt / mFormat->w();
 		geomap[2] = 0;
-		geomap[3] = y * upt - adj;
+		geomap[3] = (y+1) * upt - adj;
 		geomap[4] = 0;
-		geomap[5] = upt / mFormat->h();
+		geomap[5] = upt / -mFormat->h();
 		
 		char buffer[128];
 		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z, x, y, mFormat->extension());
-		//sprintf(buffer, "%s/%ix%i.%s", mTarget, x, y, mFormat->extension());
-		std::cout << "Writing " << buffer << "...\n";
+		if(mResume && isfile(buffer)) return NULL;
+		log("Writing %s...\n", buffer);
 		
 		GDALDataset* ret = mFormat->create(buffer);
 		ret->SetProjection(mDstProj);
 		ret->SetGeoTransform(geomap);
 		return ret;
 	}
-
-	GDALDataset* GoogleTiler::quadRaster(int i)	const
+	
+	void GoogleTiler::loadQuad(GDALDataset* quad, int x, int y, int dx, int dy) const
 	{
-		int x = i % mRegion.w + mRegion.x;
-		int y = i / mRegion.w + mRegion.y;
-		int z = mRegion.z;
-		
-		char buffer[128];
-		sprintf(buffer, "%s/%i/%i/%i.mem", mTarget, z, x, y);
-		GDALDataset* quad = mMemory->create(buffer);
-		GDALDataset* temp;
-		
-		char data[mFormat->w() * mFormat->h() * mFormat->b()];
-		
 		int w = mFormat->w();
 		int h = mFormat->h();
 		int b = mFormat->b();
+		char data[w * h * b];
+		char buffer[128];
 		
-		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z+1, 2*x+0, 2*y+0, mFormat->extension());
-		temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
-		temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
-		quad->RasterIO(GF_Write, 0, h, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
-		GDALClose(temp);
+		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, mRegion.z+1, 2*x+dx, 2*y+dy, mFormat->extension());
+		if(isfile(buffer))
+		{
+			GDALDataset* temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
+			temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+			quad->RasterIO(GF_Write, dx*w, (1-dy)*h, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+			GDALClose(temp);
+		}
+	}
+
+	GDALDataset* GoogleTiler::quadRaster(int i, char* path)	const
+	{
+		int x = i % mRegion.w + mRegion.x;
+		int y = i / mRegion.w + mRegion.y;
 		
-		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z+1, 2*x+1, 2*y+0, mFormat->extension());
-		temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
-		temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
-		quad->RasterIO(GF_Write, w, h, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
-		GDALClose(temp);
+		sprintf(path, "%s/%i/%i/%i.mem", mTarget, mRegion.z, x, y);
+		if(mResume && isfile(path)) return NULL;
+		GDALDataset* quad = mMemory->create(path);
 		
-		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z+1, 2*x+0, 2*y+1, mFormat->extension());
-		temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
-		temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
-		quad->RasterIO(GF_Write, 0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
-		GDALClose(temp);
+		loadQuad(quad, x, y, 0, 0);
+		loadQuad(quad, x, y, 1, 0);
+		loadQuad(quad, x, y, 0, 1);
+		loadQuad(quad, x, y, 1, 1);
 		
-		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z+1, 2*x+1, 2*y+1, mFormat->extension());
-		temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
-		temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
-		quad->RasterIO(GF_Write, w, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
-		GDALClose(temp);
-		
+		sprintf(path, "%s/%i/%i/%i.%s", mTarget, mRegion.z, x, y, mFormat->extension());
 		return quad;
 	}
 }
