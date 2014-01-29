@@ -20,6 +20,7 @@ namespace Razormill
 		const char*   mSrcProj;
 		char*         mDstProj;
 		const Format* mFormat;
+		const Format* mMemory;
 		
 		int           mNThreads;
 		int           mMinZoom;
@@ -30,6 +31,7 @@ namespace Razormill
 		std::atomic_long mIndex;
 		
 	protected:
+		void createDir(char* target) const;
 		void baseWorker();
 		void buildBase();
 		void buildZoom();
@@ -37,7 +39,9 @@ namespace Razormill
 		int  lastIndex() const;
 		int  nextIndex();
 		
-		virtual GDALDataset* raster(int i)     const = 0;
+		virtual void		 generateDirs()		const = 0;
+		virtual GDALDataset* baseRaster(int i)     const = 0;
+		virtual GDALDataset* quadRaster(int i)	const = 0;
 		virtual void         calcRegion(int z)       = 0;
 		virtual int          calcZoom()        const = 0;
 		

@@ -4,6 +4,9 @@
 #include <gdalwarper.h>
 
 #include <cmath>
+#include <string>
+
+#include <sys/stat.h>
 
 namespace Razormill
 {
@@ -34,10 +37,10 @@ namespace Razormill
 		double ymax = m[3];
 		
 		std::cout << "World Region:\n" <<
-		"  n: " << xmax << '\n' <<
-		"  e: " << ymax << '\n' <<
-		"  s: " << xmin << '\n' <<
-		"  w: " << ymin << '\n';
+		"  n: " << ymax << '\n' <<
+		"  e: " << xmax << '\n' <<
+		"  s: " << ymin << '\n' <<
+		"  w: " << xmin << '\n';
 		
 		double adj = M_PI * 6378137;
 		double upt = M_PI * 6378137 / pow(2, z-1);
@@ -48,7 +51,6 @@ namespace Razormill
 		mRegion.w = floor((xmax + adj) / upt) - mRegion.x + 1;
 		mRegion.h = floor((ymax + adj) / upt) - mRegion.y + 1;
 		mRegion.n = mRegion.w * mRegion.h;
-		
 		
 		std::cout << "Tile Region:\n" <<
 		"  x: " << mRegion.x << '\n' <<
@@ -65,12 +67,29 @@ namespace Razormill
 	}
 
 /**
+ * Creates a file system of the format <base>/<z>/<x>/ to store intermediate and final tiles.
+ */
+	void GoogleTiler::generateDirs() const
+	{
+		char destination[256];
+		
+		sprintf(destination, "%s/%d/", mTarget, mRegion.z);
+		createDir(destination);
+		
+		for(int i = mRegion.x; i < mRegion.x + mRegion.w; i++)
+		{
+			sprintf(destination, "%s/%d/%d/", mTarget, mRegion.z, i);
+			createDir(destination);
+		}
+	}
+
+/**
  * Returns a new GDAL raster for the indexed tile.
  *
  * @param  i  The linear index of the desired tile.
  * @result    A new raster with its SRID and GeoTransform set appropriately.
  */
-	GDALDataset* GoogleTiler::raster(int i) const
+	GDALDataset* GoogleTiler::baseRaster(int i) const
 	{
 		int x = i % mRegion.w + mRegion.x;
 		int y = i / mRegion.w + mRegion.y;
@@ -88,14 +107,58 @@ namespace Razormill
 		geomap[5] = upt / mFormat->h();
 		
 		char buffer[128];
-		//sprintf(buffer, "%s/%i/%i/%i.%s", base, z, x, y, mFormat->extension());
-		sprintf(buffer, "%s/%ix%i.%s", mTarget, x, y, mFormat->extension());
+		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z, x, y, mFormat->extension());
+		//sprintf(buffer, "%s/%ix%i.%s", mTarget, x, y, mFormat->extension());
 		std::cout << "Writing " << buffer << "...\n";
 		
 		GDALDataset* ret = mFormat->create(buffer);
 		ret->SetProjection(mDstProj);
 		ret->SetGeoTransform(geomap);
 		return ret;
+	}
+
+	GDALDataset* GoogleTiler::quadRaster(int i)	const
+	{
+		int x = i % mRegion.w + mRegion.x;
+		int y = i / mRegion.w + mRegion.y;
+		int z = mRegion.z;
+		
+		char buffer[128];
+		sprintf(buffer, "%s/%i/%i/%i.mem", mTarget, z, x, y);
+		GDALDataset* quad = mMemory->create(buffer);
+		GDALDataset* temp;
+		
+		char data[mFormat->w() * mFormat->h() * mFormat->b()];
+		
+		int w = mFormat->w();
+		int h = mFormat->h();
+		int b = mFormat->b();
+		
+		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z+1, 2*x+0, 2*y+0, mFormat->extension());
+		temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
+		temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+		quad->RasterIO(GF_Write, 0, h, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+		GDALClose(temp);
+		
+		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z+1, 2*x+1, 2*y+0, mFormat->extension());
+		temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
+		temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+		quad->RasterIO(GF_Write, w, h, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+		GDALClose(temp);
+		
+		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z+1, 2*x+0, 2*y+1, mFormat->extension());
+		temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
+		temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+		quad->RasterIO(GF_Write, 0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+		GDALClose(temp);
+		
+		sprintf(buffer, "%s/%i/%i/%i.%s", mTarget, z+1, 2*x+1, 2*y+1, mFormat->extension());
+		temp = (GDALDataset*) GDALOpen(buffer, GA_ReadOnly);
+		temp->RasterIO(GF_Read,  0, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+		quad->RasterIO(GF_Write, w, 0, w, h, data, w, h, GDT_Byte, b, NULL, 0, 0, 0);
+		GDALClose(temp);
+		
+		return quad;
 	}
 }
 

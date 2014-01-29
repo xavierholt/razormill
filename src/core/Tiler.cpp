@@ -1,4 +1,5 @@
 #include "Tiler.h"
+#include "formats/Memory.h"
 
 #include <gdal_priv.h>
 #include <gdalwarper.h>
@@ -13,10 +14,10 @@ namespace Razormill
 	{
 		mSource = (GDALDataset*) GDALOpen(source, GA_ReadOnly);
 		mSrcProj = mSource->GetProjectionRef();
-		mSource ->MarkAsShared();
 		
 		mTarget   = target;
 		mFormat   = format;
+		mMemory   = new Memory(2 * format->w(), 2 * format->h(), format->b());
 		
 		mNThreads = std::thread::hardware_concurrency();
 		mMinZoom  = 0;
@@ -26,13 +27,26 @@ namespace Razormill
 		OGRSpatialReference ogref;
 		ogref.SetWellKnownGeogCS(projection);
 		ogref.exportToWkt(&mDstProj);
-		
 	}
 	
 	Tiler::~Tiler()
 	{
 		GDALClose(mSource);
 	}
+	
+	void Tiler::createDir(char* target) const
+	{
+		int status = mkdir(target, 0755);
+		if(status != 0)
+		{
+			printf("Directory creation failed. Errcode: %d\n", status);
+			exit(-1);
+		}
+	}
+	
+/**
+ * 
+ */
 	
 	void Tiler::baseWorker()
 	{
@@ -66,7 +80,7 @@ namespace Razormill
 		MARKER();
 		while(i < lastIndex())
 		{
-			GDALDataset* target = raster(i);
+			GDALDataset* target = baseRaster(i);
 			
 			if(target != NULL)
 			{
@@ -139,6 +153,7 @@ namespace Razormill
 	void Tiler::run()
 	{
 		calcRegion(mMaxZoom);
+		generateDirs();
 		buildBase();
 		//buildZoom();
 	}
@@ -161,7 +176,29 @@ namespace Razormill
 	
 	void Tiler::zoomWorker()
 	{
-		//TODO!
+		/*printf("zoomWorker: %p\n", this);
+		int i = nextIndex();
+		if(i >= lastIndex())
+		{
+			return;
+		}
+		
+		// Do constant config.  Is there any?
+		
+		MARKER();
+		while(i < lastIndex())
+		{
+			GDALDataset* target = zoomRaster(i);
+			
+			if(target != NULL)
+			{
+				// Build overview
+				// Copy to output
+				// Close stuff
+			}
+			
+			i = nextIndex();
+		}*/
 	}
 }
 

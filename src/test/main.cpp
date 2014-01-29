@@ -8,8 +8,8 @@ int main()
 {
 	GDALAllRegister();
 	
-	const char* source = "/home/holt/Desktop/tile-test/tile_2-21.tif";
-	const char* target = "tiles";
+	const char* source = "/home/twoods/Public/tiler-test/source/tile_2-21.tif";
+	const char* target = "/home/twoods/Public/tiler-test/target";
 	Format*     format = new Razormill::GeoTIFF(256, 256, 3);
 	int         zoom   = 15;
 	

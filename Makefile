@@ -1,4 +1,4 @@
-CXXFLAGS = -std=c++11 -O3
+CXXFLAGS = -std=c++11 -O3 -I/usr/include/gdal
 LIBS     = -lgdal
 
 razormill:\
