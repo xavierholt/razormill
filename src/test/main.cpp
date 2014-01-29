@@ -10,20 +10,20 @@ int main(int argc, char **argv)
 {
 	GDALAllRegister();
 	
-	const char* source		= "/home/twoods/Public/tiler-test/source/tile_2-21.tif";
-	const char* target		= "/home/twoods/Public/tiler-test/target";
-	Format*     format		= new Razormill::GeoTIFF(256, 256, 3);
+	const char* source		= NULL;
+	const char* target		= NULL;
+	Format*     format		= NULL;
 	int         minzoom		= 15;
 	int			maxzoom		= 15;
 	int			threadcount = 1;
-	int			c;
 	bool		resume		= false;
 	bool		verbose		= false;
+	int			flag;
 	
 	
-	while ((c = getopt (argc, argv, "rz:f:t:v")) != -1)
+	while((flag = getopt (argc, argv, "rz:f:t:v")) != -1)
 	{
-		switch(c)
+		switch(flag)
 		{
 			case 'r':
 				resume = true;
@@ -66,8 +66,19 @@ int main(int argc, char **argv)
 		}
 	}
 	
-	//source = argv[optind];
-	//target = argv[optind+1];
+	if(format == NULL)
+	{
+		format = new Razormill::GeoTIFF(256, 256, 3);
+	}
+	
+	if(argc - optind < 2)
+	{
+		printf("USAGE: %s [options] <source-file> <target-dir>\n", argv[0]);
+		exit(-1);
+	}
+	
+	source = argv[optind];
+	target = argv[optind+1];
 	
 	Razormill::GoogleTiler tiler(source, target, format);
 	tiler.setNThreads(threadcount);
